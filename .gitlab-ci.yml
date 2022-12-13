@@ -1,0 +1,41 @@
+include:
+  - project: "cloudrock/cloudrock-pipelines"
+    file: "/templates/stages.yml"
+  - project: "cloudrock/cloudrock-pipelines"
+    file: "/templates/test/check-merge-compatibility.yml"
+  - project: "cloudrock/cloudrock-pipelines"
+    file: "/templates/test/lint-md-files.yml"
+  - project: "cloudrock/cloudrock-pipelines"
+    file: "/templates/release/python-module-release.yml"
+
+image: "registry.hpc.ut.ee/mirror/themattrix/tox:latest"
+
+Run unit tests:
+  stage: test
+  interruptible: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - tox
+
+Upload configuration guide:
+  image: "registry.hpc.ut.ee/mirror/library/python:3.8-buster"
+  stage: deploy
+  interruptible: true
+  rules:
+    # If changes are pushed to `develop` branch
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  variables:
+    GUIDE_PATH: docs/integrator-guide/ansible-module.md
+  script:
+    - cd /tmp/
+    - git clone "https://gitlab-ci-token:$GITLAB_TOKEN@$CI_SERVER_HOST/cloudrock/cloudrock-docs.git"
+    - cd cloudrock-docs
+    - git config --global user.name "$GITLAB_USER_NAME"
+    - git config --global user.email "$GITLAB_USER_EMAIL"
+    - cp -vf ${CI_BUILDS_DIR}/${CI_PROJECT_PATH}/README.md $GUIDE_PATH
+    - git commit $GUIDE_PATH -m "Update configuration guide" || exit 0
+    - git branch new-configuration-guide
+    - git push --set-upstream origin new-configuration-guide:master
